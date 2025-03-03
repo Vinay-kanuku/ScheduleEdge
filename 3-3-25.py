@@ -567,9 +567,9 @@ def main():
             # Style the dataframe
             def highlight_cells(val):
                 if val == "LUNCH BREAK":
-                    return 'background-color: #ffcdd2'
+                    return 'background-color: #000000'
                 elif val != "-":
-                    return 'background-color: #e3f2fd'
+                    return 'background-color: #000000'
                 return ''
             
             styled_timetable = st.session_state.timetable.style.applymap(highlight_cells)
