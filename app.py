@@ -3,11 +3,11 @@ import streamlit as st
 from io import BytesIO
 import pandas as pd
 
-from modules.ui_components import setup_ui, create_tabs
-from modules.data_processor import DataProcessor
-from modules.timetable_generator import TimetableGenerator
-from modules.file_manager import FileManager
-from modules.state_manager import StateManager
+from src.ui_components import setup_ui, create_tabs
+from src.data_processor import DataProcessor
+from src.timetable_generator import TimetableGenerator
+from src.file_manager import FileManager
+from src.state_manager import StateManager
 
 def main():
     """Main application entry point"""
