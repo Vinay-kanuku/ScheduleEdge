@@ -1,4 +1,3 @@
-# modules/state_manager.py
 import streamlit as st
 
 class StateManager:
@@ -16,6 +15,10 @@ class StateManager:
             st.session_state.generation_complete = False
         if 'active_letter' not in st.session_state:
             st.session_state.active_letter = None
+        if 'validation_results' not in st.session_state:
+            st.session_state.validation_results = {}
+        if 'generation_summary' not in st.session_state:
+            st.session_state.generation_summary = {}
     
     def get_timetables(self):
         """Get the generated timetables"""
@@ -56,3 +59,19 @@ class StateManager:
     def set_active_letter(self, letter):
         """Set the active letter for faculty filtering"""
         st.session_state.active_letter = letter
+        
+    def get_validation_results(self):
+        """Get the validation results"""
+        return st.session_state.validation_results
+    
+    def set_validation_results(self, validation_results):
+        """Store validation results in session state"""
+        st.session_state.validation_results = validation_results
+        
+    def get_generation_summary(self):
+        """Get the generation summary"""
+        return st.session_state.generation_summary
+    
+    def set_generation_summary(self, generation_summary):
+        """Store generation summary in session state"""
+        st.session_state.generation_summary = generation_summary

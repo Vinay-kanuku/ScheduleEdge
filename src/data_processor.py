@@ -1,86 +1,88 @@
-
 import pandas as pd
 import streamlit as st
+import re
 
 class DataProcessor:
     """Processes input Excel files to extract subject and faculty data"""
-    
+
     def __init__(self, uploaded_file):
         """Initialize with the uploaded file"""
         self.uploaded_file = uploaded_file
-    
+
     def process_file(self):
         """Process the uploaded Excel file and extract data blocks"""
         xls = pd.ExcelFile(self.uploaded_file)
         df = pd.read_excel(xls, sheet_name=xls.sheet_names[0], header=None)
-        
-        semesters = {'II': 'II-Year I-Semester', 'III': 'III-Year I-Semester', 'IV': 'IV-Year I-Semester'}
-        section_names = ['A', 'B', 'C', 'CSIT']
+
+        # Clean and normalize
+        df = df.map(lambda x: str(x).strip().replace('\n', ' ') if pd.notna(x) else x)
+
+        # Detect semesters
+        semesters = {}
+        semester_pattern = r'([IVX]+)-Year\s*I-Semester'
+        for idx, row in df.iterrows():
+            cell = str(row[0]).strip()
+            match = re.search(semester_pattern, cell, re.IGNORECASE)
+            if match:
+                sem = match.group(1)
+                semesters[sem] = cell
+
+        if not semesters:
+            st.error("No semester headers like 'II-Year I-Semester' found.")
+            return {}
+
+        print("Detected Semesters:", semesters)
+
         blocks = {}
-        
-        # Enhanced block detection logic
+
         for sem, marker in semesters.items():
             start_matches = df.index[df[0].astype(str).str.contains(marker, na=False)]
-            
             if start_matches.empty:
-                # Try looser matching
-                alt_marker = f"{sem}-Year"
-                start_matches = df.index[df[0].astype(str).str.contains(alt_marker, na=False)]
-                if start_matches.empty:
-                    st.error(f"Could not find data for {sem} year.")
-                    continue
-            
-            start_idx = start_matches[0] + 1
-            
-            # Find the next section marker or the end of the file
-            next_markers = []
-            for s, m in semesters.items():
-                if s != sem:  # Look for other markers
-                    matches = df.index[(df.index > start_idx) & df[0].astype(str).str.contains(m, na=False)]
-                    if not matches.empty:
-                        next_markers.append(matches[0])
-            
-            # Also consider rows with many NaN values as potential end markers
-            end_matches = df.index[(df.index > start_idx) & df[0].isna()]
-            if not end_matches.empty:
-                next_markers.append(end_matches[0])
-            
-            # If we're at the last section, use the end of the dataframe
-            if not next_markers:
-                end_idx = len(df)
-            else:
-                end_idx = min(next_markers)
-            
-            table = df.iloc[start_idx:end_idx].reset_index(drop=True)
-            
-            # Find header row containing "S.No"
-            header_rows = table.index[table[0].astype(str).str.contains('S.No', na=False)]
-            if header_rows.empty:
-                st.error(f"Could not find 'S.No' header in {sem} year data.")
                 continue
-                
-            header_row = header_rows[0]
-            table.columns = table.iloc[header_row]
-            table = table[header_row+1:].dropna(subset=['S.No'])
-            
-            # Process each section
-            for i, section in enumerate(section_names, start=4):
-                if i >= len(table.columns):
-                    continue
-                    
-                col_name = table.columns[i]
-                if pd.isna(col_name):
-                    continue
-                    
-                section_key = f"{sem}-{section}"
-                
-                # Check if the required columns exist
-                if 'Subject Code' not in table.columns or 'Subject Name' not in table.columns:
-                    st.error(f"Required columns missing in {sem} year data.")
-                    continue
-                    
-                blocks[section_key] = table[['Subject Code', 'Subject Name', col_name]].rename(
-                    columns={col_name: 'Faculty Name'}
-                )
-        
+            start_idx = start_matches[0] + 1
+
+            # Next marker = next semester
+            next_markers = [i for i in df.index if i > start_idx and any(m in str(df.at[i, 0]) for m in semesters.values())]
+            end_idx = min(next_markers) if next_markers else len(df)
+            table = df.iloc[start_idx:end_idx].reset_index(drop=True)
+
+            if table.empty or 0 not in table.columns:
+                continue
+
+            header_row_index = table.index[table[0].astype(str).str.contains("S.No", case=False, na=False)]
+            if header_row_index.empty:
+                continue
+
+            header_idx = header_row_index[0]
+            table.columns = table.iloc[header_idx]
+            table = table[header_idx + 1:].dropna(subset=['S.No'])
+
+            # Find all section columns dynamically
+            possible_section_cols = [col for col in table.columns if isinstance(col, str) and col.strip().startswith("Section")]
+
+            for sec_col in possible_section_cols:
+                section_name = sec_col.replace("Section-", "").strip()
+                section_key = f"{sem}-{section_name}"
+
+                try:
+                    # Clean faculty names — extract first word (remove C1/A1 etc.)
+                    cleaned = table[['Subject Code', 'Subject Name', sec_col]].copy()
+                    cleaned.columns = ['Subject Code', 'Subject Name', 'Faculty Name']
+                    cleaned['Faculty Name'] = cleaned['Faculty Name'].apply(self.clean_faculty)
+                    blocks[section_key] = cleaned
+                except Exception as e:
+                    st.warning(f"Skipping {section_key} due to error: {e}")
+
+        print("Extracted Blocks:", blocks.keys())
         return blocks
+
+    def clean_faculty(self, cell):
+        """Extract the first meaningful faculty name"""
+        if pd.isna(cell):
+            return ""
+        text = str(cell)
+        if ':' in text:
+            text = text.split(':')[-1]
+        if '/' in text:
+            text = text.split('/')[0]
+        return text.strip()
